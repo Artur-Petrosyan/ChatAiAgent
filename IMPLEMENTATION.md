@@ -1,3 +1,229 @@
+# Implementation Documentation for Ollama LangGraph Agent
+
+## Project Overview
+
+A simple AI agent built with LangGraph.js that uses a local LLM via Ollama to answer user questions. The project includes a React + Vite web interface and an Express API server.
+
+## Architecture
+
+### System Components
+
+1. **LangGraph Agent** (`src/agent/`)
+   - Graph state definition
+   - Nodes for message processing
+   - Agent execution graph
+
+2. **Express API Server** (`src/server/`)
+   - REST API endpoint for request processing
+   - Integration with LangGraph agent
+
+3. **React Frontend** (`src/`)
+   - UI for interacting with the agent
+   - Sending messages and displaying responses
+
+## Implementation Details
+
+### 1. State Definition (state.ts)
+
+Used Annotation API from LangGraph for state definition:
+
+```typescript
+export const AgentState = Annotation.Root({
+  ...MessagesAnnotation.spec,  // Built-in annotation for messages
+  llmCalls: Annotation<number>({
+    reducer: (x, y) => x + y,   // Reducer for summing calls
+    default: () => 0,
+  }),
+  userMemory: Annotation<UserMemory>({
+    reducer: (x, y) => {
+      return {
+        ...x,
+        ...y,
+        facts: [...(x?.facts || []), ...(y?.facts || [])].filter((v, i, a) => a.indexOf(v) === i),
+        lastUpdated: new Date(),
+      };
+    },
+    default: () => ({}),
+  }),
+});
+```
+
+**What was done:**
+- Used `MessagesAnnotation` for message handling
+- Added `llmCalls` field to track LLM call count
+- Added `userMemory` for storing user information
+- Defined state type for TypeScript
+
+### 2. Graph Nodes (nodes.ts)
+
+Created nodes for calling LLM via Ollama and extracting user memory:
+
+```typescript
+const model = new ChatOllama({
+  baseUrl: "http://localhost:11434",
+  model: "mistral",
+  temperature: 0.7,
+});
+```
+
+**What was done:**
+- Integrated `ChatOllama` from `@langchain/community`
+- Configured system prompt in English
+- Node accepts state and returns updated state with LLM response
+- Memory extraction node for analyzing user information
+
+### 3. Execution Graph (graph.ts)
+
+Built a graph with LLM node and memory extraction node:
+
+```typescript
+export const agentGraph = new StateGraph(AgentState)
+  .addNode("llm", llmNode)
+  .addNode("extract_memory", extractMemoryNode)
+  .addEdge(START, "llm")
+  .addEdge("llm", "extract_memory")
+  .addEdge("extract_memory", END)
+  .compile();
+```
+
+**What was done:**
+- Used Graph API for explicit graph definition
+- Added memory extraction after LLM call
+- Graph compiles once when module loads
+
+### 4. Express API Server (server/index.ts)
+
+Created REST API for interacting with the agent:
+
+**Endpoints:**
+- `POST /api/chat` - processing user messages
+- `GET /api/health` - server status check
+
+**What was done:**
+- Configured CORS for frontend
+- Error handling with clear messages
+- Converting incoming messages to `HumanMessage`
+- Extracting response from graph execution result
+- Session management
+
+### 5. React Frontend (App.tsx)
+
+Created a simple chat interface:
+
+**Functionality:**
+- Displaying message history
+- Sending messages via API
+- Loading indicator
+- Error handling
+
+**What was done:**
+- Used React hooks (useState)
+- Async API request sending
+- Beautiful UI with gradients and animations
+- Responsive design
+
+### 6. Project Configuration
+
+**package.json:**
+- Installed necessary dependencies:
+  - `@langchain/langgraph` - main framework
+  - `@langchain/community` - Ollama integration
+  - `@langchain/core` - base types and messages
+  - `express` - backend server
+  - `react`, `vite` - frontend
+
+**vite.config.ts:**
+- Configured proxy for API requests
+- Port 3000 for frontend
+- Proxying `/api` to `localhost:3001`
+
+**tsconfig.json:**
+- Configured TypeScript for modern JavaScript
+- React JSX support
+- Strict type checking mode
+
+## Implementation Features
+
+### Using Annotation API
+
+Instead of the traditional Zod approach, Annotation API was used, as recommended in the documentation:
+
+**Advantages:**
+- More modern approach
+- Built-in reducer function support
+- Easier to work with messages via `MessagesAnnotation`
+
+### Simple Graph Architecture
+
+Chose a simple architecture with LLM node and memory extraction, because:
+- Agent doesn't require tools
+- No complex conditional logic
+- Main task is answering user questions and remembering information
+
+### Ollama Integration
+
+Used `ChatOllama` from `@langchain/community`:
+- Support for local models
+- Simple configuration via baseUrl
+- Compatibility with LangChain messages
+
+## Running and Usage
+
+### Development Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode (server and client simultaneously)
+npm run dev
+
+# Server only
+npm run dev:server
+
+# Client only
+npm run dev:client
+```
+
+### Checking Operation
+
+1. Make sure Ollama is running:
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+2. Open http://localhost:3000 in browser
+
+3. Send a message to the agent
+
+## Possible Improvements
+
+1. **Adding Tools**
+   - Can extend agent with tools for performing actions
+   - Use ReAct pattern from documentation
+
+2. **Memory Between Sessions**
+   - Add `MemorySaver` for state persistence
+   - Use `InMemoryStore` for long-term memory
+
+3. **Streaming**
+   - Implement streaming of LLM responses
+   - Display tokens in real-time
+
+4. **Error Handling**
+   - More detailed Ollama error handling
+   - Retry logic for failed requests
+
+5. **Graph Visualization**
+   - Add graph structure display
+   - Show current execution state
+
+## Conclusion
+
+A working AI agent built with LangGraph.js with Ollama integration. The project follows best practices from the documentation and uses modern approaches (Annotation API). The code is structured, typed, and ready for extension.
+
+---
+
 # Документация по реализации Ollama LangGraph Agent
 
 ## Обзор проекта
@@ -34,54 +260,62 @@ export const AgentState = Annotation.Root({
     reducer: (x, y) => x + y,   // Reducer для суммирования вызовов
     default: () => 0,
   }),
+  userMemory: Annotation<UserMemory>({
+    reducer: (x, y) => {
+      return {
+        ...x,
+        ...y,
+        facts: [...(x?.facts || []), ...(y?.facts || [])].filter((v, i, a) => a.indexOf(v) === i),
+        lastUpdated: new Date(),
+      };
+    },
+    default: () => ({}),
+  }),
 });
 ```
 
 **Что было сделано:**
 - Использован `MessagesAnnotation` для работы с сообщениями
 - Добавлено поле `llmCalls` для отслеживания количества вызовов LLM
+- Добавлена память пользователя `userMemory`
 - Определен тип состояния для TypeScript
 
 ### 2. Узлы графа (nodes.ts)
 
-Создан узел для вызова LLM через Ollama:
+Созданы узлы для вызова LLM через Ollama и извлечения памяти пользователя:
 
 ```typescript
 const model = new ChatOllama({
   baseUrl: "http://localhost:11434",
-  model: "llama3.2",
+  model: "mistral",
   temperature: 0.7,
 });
 ```
 
 **Что было сделано:**
 - Интегрирован `ChatOllama` из `@langchain/community`
-- Настроен системный промпт для русского языка
+- Настроен системный промпт на английском языке
 - Узел принимает состояние и возвращает обновленное состояние с ответом LLM
+- Узел извлечения памяти для анализа информации о пользователе
 
 ### 3. Граф выполнения (graph.ts)
 
-Построен простой граф с одним узлом LLM:
+Построен граф с узлом LLM и узлом извлечения памяти:
 
 ```typescript
 export const agentGraph = new StateGraph(AgentState)
   .addNode("llm", llmNode)
+  .addNode("extract_memory", extractMemoryNode)
   .addEdge(START, "llm")
-  .addConditionalEdges("llm", shouldContinue, {
-    llm: "llm",
-    [END]: END,
-  })
+  .addEdge("llm", "extract_memory")
+  .addEdge("extract_memory", END)
   .compile();
 ```
 
 **Что было сделано:**
 - Использован Graph API для явного определения графа
-- Добавлен условный переход для завершения выполнения
+- Добавлено извлечение памяти после вызова LLM
 - Граф компилируется один раз при загрузке модуля
-
-**Логика завершения:**
-- Если последнее сообщение от AI - завершаем (END)
-- Иначе продолжаем с вызовом LLM (но в текущей реализации это не используется, так как граф простой)
 
 ### 4. Express API Server (server/index.ts)
 
@@ -96,6 +330,7 @@ export const agentGraph = new StateGraph(AgentState)
 - Обработка ошибок с возвратом понятных сообщений
 - Преобразование входящих сообщений в `HumanMessage`
 - Извлечение ответа из результата выполнения графа
+- Управление сессиями
 
 ### 5. React Frontend (App.tsx)
 
@@ -146,10 +381,10 @@ export const agentGraph = new StateGraph(AgentState)
 
 ### Простая архитектура графа
 
-Выбрана простая архитектура с одним узлом LLM, так как:
+Выбрана простая архитектура с узлом LLM и извлечением памяти, так как:
 - Агент не требует инструментов (tools)
 - Нет сложной условной логики
-- Основная задача - ответ на вопрос пользователя
+- Основная задача - ответ на вопрос пользователя и запоминание информации
 
 ### Интеграция с Ollama
 
@@ -212,4 +447,3 @@ npm run dev:client
 ## Заключение
 
 Реализован рабочий AI-агент на базе LangGraph.js с интеграцией Ollama. Проект следует лучшим практикам из документации и использует современные подходы (Annotation API). Код структурирован, типизирован и готов к расширению.
-
